@@ -266,7 +266,43 @@ with tab2:
 with tab3:
     st.header("📚 How to Use")
     
-    with st.expander("🎯 Understanding ACOS", expanded=True):
+    with st.expander("📥 How to Download Your eBay Ads Report", expanded=True):
+        st.write("""
+        **Step-by-Step Instructions:**
+        
+        1. **Log into eBay Seller Hub**
+           - Go to [seller.ebay.com](https://www.seller.ebay.com)
+           - Sign in with your seller account
+        
+        2. **Navigate to Advertising Dashboard**
+           - Click **"Marketing"** in the top menu
+           - Select **"Advertising dashboard"**
+           - Or go directly to: [advertising.ebay.com](https://advertising.ebay.com)
+        
+        3. **Access Campaign Reports**
+           - Click **"Campaigns"** tab
+           - Select **"Promoted Listings Standard"** or your campaign type
+           - Click **"View all campaigns"**
+        
+        4. **Generate Performance Report**
+           - Click **"Reports"** or **"Performance"** tab
+           - Set date range to **Last 30 days** (recommended)
+           - Select **"Campaign level"** or **"Listing level"** report
+        
+        5. **Download the Report**
+           - Click **"Download"** or **"Export"** button
+           - Choose **CSV format**
+           - Save to your computer
+        
+        6. **Upload Here**
+           - Click "Browse files" above
+           - Select your downloaded CSV
+           - Click "Analyze Campaigns"
+        
+        **💡 Pro Tip:** For best results, use a 30-day report to get enough data for accurate recommendations.
+        """)
+    
+    with st.expander("🎯 Understanding ACOS"):
         st.write("""
         **ACOS (Advertising Cost of Sale)** = (Ad Spend ÷ Revenue) × 100
         
