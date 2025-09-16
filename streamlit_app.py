@@ -79,12 +79,19 @@ def clean_percentage(value):
 
 def process_keyword_report(df):
     """Process and clean keyword report"""
-    # Skip warning header if present
-    if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
-        df = df.iloc[2:]
-        df.columns = df.iloc[0]
-        df = df.iloc[1:]
-        df.reset_index(drop=True, inplace=True)
+    # Skip ALL non-data header rows at the beginning
+    # eBay reports typically have 2-3 header rows before actual data
+    start_row = 0
+    for i in range(min(5, len(df))):  # Check first 5 rows max
+        # Look for the row that contains column headers
+        if any('Seller Keyword' in str(val) or 'Campaign name' in str(val) for val in df.iloc[i].values):
+            df.columns = df.iloc[i]
+            start_row = i + 1
+            break
+    
+    # If we found headers, use data from next row onwards
+    if start_row > 0:
+        df = df.iloc[start_row:].reset_index(drop=True)
     
     # Create a standardized dataframe with consistent column names
     processed_df = pd.DataFrame()
@@ -130,12 +137,18 @@ def process_keyword_report(df):
 
 def process_query_report(df):
     """Process and clean query report"""
-    # Skip warning header if present
-    if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
-        df = df.iloc[2:]
-        df.columns = df.iloc[0]
-        df = df.iloc[1:]
-        df.reset_index(drop=True, inplace=True)
+    # Skip ALL non-data header rows at the beginning
+    start_row = 0
+    for i in range(min(5, len(df))):  # Check first 5 rows max
+        # Look for the row that contains column headers
+        if any('Search Query' in str(val) or 'Campaign name' in str(val) for val in df.iloc[i].values):
+            df.columns = df.iloc[i]
+            start_row = i + 1
+            break
+    
+    # If we found headers, use data from next row onwards
+    if start_row > 0:
+        df = df.iloc[start_row:].reset_index(drop=True)
     
     # Create a standardized dataframe with consistent column names
     processed_df = pd.DataFrame()
