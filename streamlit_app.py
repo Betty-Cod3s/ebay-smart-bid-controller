@@ -79,119 +79,105 @@ def clean_percentage(value):
 
 def process_keyword_report(df):
     """Process and clean keyword report"""
-    # Skip header rows if they exist
+    # Skip warning header if present
     if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
         df = df.iloc[2:]
         df.columns = df.iloc[0]
         df = df.iloc[1:]
         df.reset_index(drop=True, inplace=True)
     
-    # Clean ALL column names - remove ALL spaces from ends
-    df.columns = [str(col).strip() for col in df.columns]
+    # Create a standardized dataframe with consistent column names
+    processed_df = pd.DataFrame()
     
-    # Clean numeric columns
+    # Map all columns, stripping whitespace
+    for col in df.columns:
+        col_clean = str(col).strip()
+        processed_df[col_clean] = df[col].values
+    
+    # Ensure numeric columns are numeric
     numeric_cols = ['Impressions', 'Clicks', 'Sold quantity']
     for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        if col in processed_df.columns:
+            processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce').fillna(0)
     
-    # Clean currency columns  
+    # Clean currency columns
     currency_cols = ['Bid', 'Ad fees', 'Sales', 'Average cost per click', 'Average cost per sale']
     for col in currency_cols:
-        if col in df.columns:
-            df[col] = df[col].apply(clean_currency)
+        if col in processed_df.columns:
+            processed_df[col] = processed_df[col].apply(clean_currency)
     
-    # Add Status column if missing
-    if 'Status' not in df.columns:
-        df['Status'] = 'Active'  # Default to Active
+    # Add calculated columns
+    processed_df['ACOS'] = 0
+    processed_df['CTR_calc'] = 0
     
-    # Calculate ACOS
-    if 'Sales' in df.columns and 'Ad fees' in df.columns:
-        df['ACOS'] = df.apply(lambda row: (row['Ad fees'] / row['Sales'] * 100) 
-                              if row['Sales'] > 0 else (999 if row['Ad fees'] > 0 else 0), axis=1)
-    else:
-        df['ACOS'] = 0
+    if 'Sales' in processed_df.columns and 'Ad fees' in processed_df.columns:
+        processed_df['ACOS'] = processed_df.apply(
+            lambda row: (row['Ad fees'] / row['Sales'] * 100) if row['Sales'] > 0 
+            else (999 if row['Ad fees'] > 0 else 0), axis=1
+        )
     
-    # Calculate CTR
-    if 'Clicks' in df.columns and 'Impressions' in df.columns:
-        df['CTR_calc'] = df.apply(lambda row: (row['Clicks'] / row['Impressions'] * 100) 
-                                   if row['Impressions'] > 0 else 0, axis=1)
-    else:
-        df['CTR_calc'] = 0
+    if 'Clicks' in processed_df.columns and 'Impressions' in processed_df.columns:
+        processed_df['CTR_calc'] = processed_df.apply(
+            lambda row: (row['Clicks'] / row['Impressions'] * 100) if row['Impressions'] > 0 
+            else 0, axis=1
+        )
     
-    return df
+    # Ensure Status column exists
+    if 'Status' not in processed_df.columns:
+        processed_df['Status'] = 'Active'
+    
+    return processed_df
 
 def process_query_report(df):
     """Process and clean query report"""
-    # Skip header rows if they exist
+    # Skip warning header if present
     if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
         df = df.iloc[2:]
         df.columns = df.iloc[0]
         df = df.iloc[1:]
         df.reset_index(drop=True, inplace=True)
     
-    # Clean ALL column names - remove ALL spaces from ends
-    df.columns = [str(col).strip() for col in df.columns]
+    # Create a standardized dataframe with consistent column names
+    processed_df = pd.DataFrame()
     
-    # Clean numeric columns
+    # Map all columns, stripping whitespace
+    for col in df.columns:
+        col_clean = str(col).strip()
+        processed_df[col_clean] = df[col].values
+    
+    # Ensure numeric columns are numeric
     numeric_cols = ['Impressions', 'Clicks', 'Sold quantity']
     for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        if col in processed_df.columns:
+            processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce').fillna(0)
     
     # Clean currency columns
     currency_cols = ['Keyword Bid', 'Ad fees', 'Sales']
     for col in currency_cols:
-        if col in df.columns:
-            df[col] = df[col].apply(clean_currency)
+        if col in processed_df.columns:
+            processed_df[col] = processed_df[col].apply(clean_currency)
     
-    # Calculate ACOS for queries
-    if 'Sales' in df.columns and 'Ad fees' in df.columns:
-        df['ACOS'] = df.apply(lambda row: (row['Ad fees'] / row['Sales'] * 100) 
-                              if row['Sales'] > 0 else (999 if row['Ad fees'] > 0 else 0), axis=1)
-    else:
-        df['ACOS'] = 0
+    # Add ACOS calculation
+    processed_df['ACOS'] = 0
+    if 'Sales' in processed_df.columns and 'Ad fees' in processed_df.columns:
+        processed_df['ACOS'] = processed_df.apply(
+            lambda row: (row['Ad fees'] / row['Sales'] * 100) if row['Sales'] > 0 
+            else (999 if row['Ad fees'] > 0 else 0), axis=1
+        )
     
-    return df
+    return processed_df
 
 def generate_bid_recommendations(keyword_df, config):
     """Generate bid adjustment recommendations"""
     recommendations = []
     
-    # Debug: Print column names to see what we have
-    print(f"Available columns: {keyword_df.columns.tolist()}")
-    
-    # Check for required columns and their variations
-    bid_col = None
-    status_col = None
-    keyword_col = None
-    match_col = None
-    
-    # Find the actual column names (case-insensitive)
-    for col in keyword_df.columns:
-        col_lower = col.lower()
-        if 'bid' in col_lower and bid_col is None:
-            bid_col = col
-        if 'status' in col_lower and status_col is None:
-            status_col = col
-        if 'seller keyword' in col_lower and keyword_col is None:
-            keyword_col = col
-        if 'match type' in col_lower and match_col is None:
-            match_col = col
-    
-    # Default values if columns not found
-    bid_col = bid_col or 'Bid'
-    status_col = status_col or 'Status'
-    keyword_col = keyword_col or 'Seller Keyword'
-    match_col = match_col or 'Keyword Match Type'
-    
     for _, row in keyword_df.iterrows():
-        # Skip inactive keywords if status column exists
-        if status_col in keyword_df.columns:
-            if row.get(status_col, 'Active') != 'Active':
-                continue
+        # Skip inactive keywords
+        if 'Status' in row and row['Status'] != 'Active':
+            continue
         
-        current_bid = row.get(bid_col, 0)
+        # Get values with defaults if columns don't exist
+        current_bid = row.get('Bid', 0)
         impressions = row.get('Impressions', 0)
         clicks = row.get('Clicks', 0)
         sales = row.get('Sold quantity', 0)
@@ -199,6 +185,8 @@ def generate_bid_recommendations(keyword_df, config):
         revenue = row.get('Sales', 0)
         acos = row.get('ACOS', 0)
         ctr = row.get('CTR_calc', 0)
+        keyword = row.get('Seller Keyword', 'Unknown')
+        match_type = row.get('Keyword Match Type', 'Unknown')
         
         action = None
         reason = ""
@@ -214,13 +202,13 @@ def generate_bid_recommendations(keyword_df, config):
         elif impressions >= config['min_impressions_for_ctr'] and clicks == 0:
             action = "INCREASE"
             new_bid = current_bid * (1 + config['increase_percent'] / 100)
-            reason = f"{impressions} impressions with 0 clicks - bid may be too low"
+            reason = f"{int(impressions)} impressions with 0 clicks - bid may be too low"
         
         # Rule 3: High clicks but no sales
         elif clicks >= config['min_clicks_no_sales'] and sales == 0:
             action = "DECREASE"
             new_bid = current_bid * (1 - config['decrease_percent'] / 100)
-            reason = f"{clicks} clicks with 0 sales - reduce spend"
+            reason = f"{int(clicks)} clicks with 0 sales - reduce spend"
         
         # Rule 4: Good ACOS - increase to get more volume
         elif acos < config['acos_good'] and sales > 0:
@@ -236,8 +224,8 @@ def generate_bid_recommendations(keyword_df, config):
         
         if action:
             recommendations.append({
-                'Keyword': row.get(keyword_col, 'Unknown'),
-                'Match Type': row.get(match_col, 'Unknown'),
+                'Keyword': keyword,
+                'Match Type': match_type,
                 'Current Bid': current_bid,
                 'New Bid': round(new_bid, 2),
                 'Action': action,
@@ -257,83 +245,43 @@ def generate_bid_recommendations(keyword_df, config):
 def find_negative_keywords(query_df, config):
     """Identify potential negative keywords from query report"""
     
-    # Find the actual column names
-    query_col = None
-    impressions_col = None
-    clicks_col = None
-    ad_fees_col = None
-    sales_col = None
-    sold_col = None
+    # Check if we have the Search Query column
+    if 'Search Query' not in query_df.columns:
+        return pd.DataFrame()
     
-    for col in query_df.columns:
-        col_lower = col.lower()
-        if 'search query' in col_lower and query_col is None:
-            query_col = col
-        elif 'impressions' in col_lower and impressions_col is None:
-            impressions_col = col
-        elif 'clicks' in col_lower and clicks_col is None:
-            clicks_col = col
-        elif 'ad fees' in col_lower and ad_fees_col is None:
-            ad_fees_col = col
-        elif col_lower == 'sales' and sales_col is None:
-            sales_col = col
-        elif 'sold quantity' in col_lower and sold_col is None:
-            sold_col = col
-    
-    # Default values if not found
-    query_col = query_col or 'Search Query'
-    impressions_col = impressions_col or 'Impressions'
-    clicks_col = clicks_col or 'Clicks'
-    ad_fees_col = ad_fees_col or 'Ad fees'
-    sales_col = sales_col or 'Sales'
-    sold_col = sold_col or 'Sold quantity'
-    
-    # Check if we have the necessary columns
-    if query_col not in query_df.columns:
-        return pd.DataFrame()  # Return empty if no query column
-    
-    # Group by search query
+    # Create aggregation dict for available columns
     agg_dict = {}
-    if impressions_col in query_df.columns:
-        agg_dict[impressions_col] = 'sum'
-    if clicks_col in query_df.columns:
-        agg_dict[clicks_col] = 'sum'
-    if ad_fees_col in query_df.columns:
-        agg_dict[ad_fees_col] = 'sum'
-    if sales_col in query_df.columns:
-        agg_dict[sales_col] = 'sum'
-    if sold_col in query_df.columns:
-        agg_dict[sold_col] = 'sum'
+    if 'Impressions' in query_df.columns:
+        agg_dict['Impressions'] = 'sum'
+    if 'Clicks' in query_df.columns:
+        agg_dict['Clicks'] = 'sum'
+    if 'Ad fees' in query_df.columns:
+        agg_dict['Ad fees'] = 'sum'
+    if 'Sales' in query_df.columns:
+        agg_dict['Sales'] = 'sum'
+    if 'Sold quantity' in query_df.columns:
+        agg_dict['Sold quantity'] = 'sum'
     
     if not agg_dict:
-        return pd.DataFrame()  # No numeric columns to aggregate
+        return pd.DataFrame()
     
-    query_summary = query_df.groupby(query_col).agg(agg_dict).reset_index()
-    
-    # Rename columns to standard names
-    query_summary.rename(columns={
-        impressions_col: 'Impressions',
-        clicks_col: 'Clicks',
-        ad_fees_col: 'Ad fees',
-        sales_col: 'Sales',
-        sold_col: 'Sold quantity'
-    }, inplace=True)
+    # Group by search query
+    query_summary = query_df.groupby('Search Query').agg(agg_dict).reset_index()
     
     # Calculate ACOS for each query
-    query_summary['ACOS'] = query_summary.apply(
-        lambda row: (row.get('Ad fees', 0) / row.get('Sales', 1) * 100) if row.get('Sales', 0) > 0 
-        else (999 if row.get('Ad fees', 0) > 0 else 0), axis=1
-    )
+    if 'Sales' in query_summary.columns and 'Ad fees' in query_summary.columns:
+        query_summary['ACOS'] = query_summary.apply(
+            lambda row: (row['Ad fees'] / row['Sales'] * 100) if row['Sales'] > 0 
+            else (999 if row['Ad fees'] > 0 else 0), axis=1
+        )
+    else:
+        query_summary['ACOS'] = 0
     
     # Filter for negative keyword candidates
-    min_clicks = config.get('min_queries_for_negative', 3)
-    max_acos = config.get('max_acos_for_negative', 100)
-    
     negative_candidates = query_summary[
-        (query_summary.get('Clicks', pd.Series([0]*len(query_summary))) >= min_clicks) &
-        ((query_summary['ACOS'] > max_acos) | 
-         ((query_summary.get('Sales', pd.Series([0]*len(query_summary))) == 0) & 
-          (query_summary.get('Ad fees', pd.Series([0]*len(query_summary))) > 0)))
+        (query_summary.get('Clicks', 0) >= config['min_queries_for_negative']) &
+        ((query_summary['ACOS'] > config['max_acos_for_negative']) | 
+         ((query_summary.get('Sales', 0) == 0) & (query_summary.get('Ad fees', 0) > 0)))
     ].copy()
     
     if len(negative_candidates) == 0:
@@ -347,16 +295,23 @@ def find_negative_keywords(query_df, config):
     # Sort by wasted spend
     negative_candidates['Wasted Spend'] = negative_candidates.apply(
         lambda row: row.get('Ad fees', 0) if row.get('Sales', 0) == 0 
-        else row.get('Ad fees', 0) - (row.get('Sales', 0) * config.get('acos_good', 30) / 100), axis=1
+        else row.get('Ad fees', 0) - (row.get('Sales', 0) * config['acos_good'] / 100), axis=1
     )
     
     negative_candidates = negative_candidates.sort_values('Wasted Spend', ascending=False)
     
-    # Rename query column back for display
-    negative_candidates.rename(columns={query_col: 'Search Query'}, inplace=True)
+    # Select columns for output
+    output_cols = ['Search Query', 'Recommendation', 'Wasted Spend']
+    if 'Clicks' in negative_candidates.columns:
+        output_cols.insert(1, 'Clicks')
+    if 'Ad fees' in negative_candidates.columns:
+        output_cols.insert(-1, 'Ad fees')
+    if 'Sales' in negative_candidates.columns:
+        output_cols.insert(-1, 'Sales')
+    if 'ACOS' in negative_candidates.columns:
+        output_cols.insert(-1, 'ACOS')
     
-    return negative_candidates[['Search Query', 'Clicks', 'Ad fees', 'Sales', 'ACOS', 
-                                'Recommendation', 'Wasted Spend']].round(2)
+    return negative_candidates[output_cols].round(2)
 
 with tab1:
     st.header("📤 Upload Your eBay Reports")
@@ -381,18 +336,20 @@ with tab1:
                 st.session_state.keyword_data = keyword_df
                 
                 # Show summary
-                active_keywords = keyword_df[keyword_df['Status'] == 'Active']
+                active_keywords = keyword_df[keyword_df.get('Status', 'Active') == 'Active'] if 'Status' in keyword_df.columns else keyword_df
                 st.success(f"✅ Loaded {len(active_keywords)} active keywords")
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.metric("Keywords with clicks", 
-                             len(active_keywords[active_keywords['Clicks'] > 0]))
+                    if 'Clicks' in keyword_df.columns:
+                        st.metric("Keywords with clicks", 
+                                 len(active_keywords[active_keywords['Clicks'] > 0]))
                 with col_b:
-                    st.metric("Keywords with sales", 
-                             len(active_keywords[active_keywords['Sold quantity'] > 0]))
+                    if 'Sold quantity' in keyword_df.columns:
+                        st.metric("Keywords with sales", 
+                                 len(active_keywords[active_keywords['Sold quantity'] > 0]))
             except Exception as e:
-                st.error(f"Error processing keyword file: {e}")
+                st.error(f"Error processing keyword file: {str(e)}")
     
     with col2:
         st.subheader("2️⃣ Query Report")
@@ -414,13 +371,15 @@ with tab1:
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.metric("Queries with clicks", 
-                             len(query_df[query_df['Clicks'] > 0]))
+                    if 'Clicks' in query_df.columns:
+                        st.metric("Queries with clicks", 
+                                 len(query_df[query_df['Clicks'] > 0]))
                 with col_b:
-                    st.metric("Queries with sales", 
-                             len(query_df[query_df['Sold quantity'] > 0]))
+                    if 'Sold quantity' in query_df.columns:
+                        st.metric("Queries with sales", 
+                                 len(query_df[query_df['Sold quantity'] > 0]))
             except Exception as e:
-                st.error(f"Error processing query file: {e}")
+                st.error(f"Error processing query file: {str(e)}")
     
     # Analyze button
     if st.session_state.keyword_data is not None and st.session_state.query_data is not None:
@@ -520,8 +479,9 @@ with tab3:
         st.write(f"Found {len(st.session_state.negative_keywords)} search queries that are wasting budget:")
         
         # Summary of wasted spend
-        total_wasted = st.session_state.negative_keywords['Wasted Spend'].sum()
-        st.metric("💸 Total Wasted Spend", f"${total_wasted:.2f}")
+        if 'Wasted Spend' in st.session_state.negative_keywords.columns:
+            total_wasted = st.session_state.negative_keywords['Wasted Spend'].sum()
+            st.metric("💸 Total Wasted Spend", f"${total_wasted:.2f}")
         
         st.divider()
         
