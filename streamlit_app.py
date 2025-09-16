@@ -158,18 +158,47 @@ def generate_bid_recommendations(keyword_df, config):
     """Generate bid adjustment recommendations"""
     recommendations = []
     
+    # Debug: Print column names to see what we have
+    print(f"Available columns: {keyword_df.columns.tolist()}")
+    
+    # Check for required columns and their variations
+    bid_col = None
+    status_col = None
+    keyword_col = None
+    match_col = None
+    
+    # Find the actual column names (case-insensitive)
+    for col in keyword_df.columns:
+        col_lower = col.lower()
+        if 'bid' in col_lower and bid_col is None:
+            bid_col = col
+        if 'status' in col_lower and status_col is None:
+            status_col = col
+        if 'seller keyword' in col_lower and keyword_col is None:
+            keyword_col = col
+        if 'match type' in col_lower and match_col is None:
+            match_col = col
+    
+    # Default values if columns not found
+    bid_col = bid_col or 'Bid'
+    status_col = status_col or 'Status'
+    keyword_col = keyword_col or 'Seller Keyword'
+    match_col = match_col or 'Keyword Match Type'
+    
     for _, row in keyword_df.iterrows():
-        if row['Status'] != 'Active':
-            continue
-            
-        current_bid = row['Bid']
-        impressions = row['Impressions']
-        clicks = row['Clicks']
-        sales = row['Sold quantity']
-        ad_fees = row['Ad fees']
-        revenue = row['Sales']
-        acos = row['ACOS']
-        ctr = row['CTR_calc']
+        # Skip inactive keywords if status column exists
+        if status_col in keyword_df.columns:
+            if row.get(status_col, 'Active') != 'Active':
+                continue
+        
+        current_bid = row.get(bid_col, 0)
+        impressions = row.get('Impressions', 0)
+        clicks = row.get('Clicks', 0)
+        sales = row.get('Sold quantity', 0)
+        ad_fees = row.get('Ad fees', 0)
+        revenue = row.get('Sales', 0)
+        acos = row.get('ACOS', 0)
+        ctr = row.get('CTR_calc', 0)
         
         action = None
         reason = ""
@@ -207,8 +236,8 @@ def generate_bid_recommendations(keyword_df, config):
         
         if action:
             recommendations.append({
-                'Keyword': row['Seller Keyword'],
-                'Match Type': row['Keyword Match Type'],
+                'Keyword': row.get(keyword_col, 'Unknown'),
+                'Match Type': row.get(match_col, 'Unknown'),
                 'Current Bid': current_bid,
                 'New Bid': round(new_bid, 2),
                 'Action': action,
