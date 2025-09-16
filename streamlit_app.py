@@ -256,40 +256,104 @@ def generate_bid_recommendations(keyword_df, config):
 
 def find_negative_keywords(query_df, config):
     """Identify potential negative keywords from query report"""
+    
+    # Find the actual column names
+    query_col = None
+    impressions_col = None
+    clicks_col = None
+    ad_fees_col = None
+    sales_col = None
+    sold_col = None
+    
+    for col in query_df.columns:
+        col_lower = col.lower()
+        if 'search query' in col_lower and query_col is None:
+            query_col = col
+        elif 'impressions' in col_lower and impressions_col is None:
+            impressions_col = col
+        elif 'clicks' in col_lower and clicks_col is None:
+            clicks_col = col
+        elif 'ad fees' in col_lower and ad_fees_col is None:
+            ad_fees_col = col
+        elif col_lower == 'sales' and sales_col is None:
+            sales_col = col
+        elif 'sold quantity' in col_lower and sold_col is None:
+            sold_col = col
+    
+    # Default values if not found
+    query_col = query_col or 'Search Query'
+    impressions_col = impressions_col or 'Impressions'
+    clicks_col = clicks_col or 'Clicks'
+    ad_fees_col = ad_fees_col or 'Ad fees'
+    sales_col = sales_col or 'Sales'
+    sold_col = sold_col or 'Sold quantity'
+    
+    # Check if we have the necessary columns
+    if query_col not in query_df.columns:
+        return pd.DataFrame()  # Return empty if no query column
+    
     # Group by search query
-    query_summary = query_df.groupby('Search Query').agg({
-        'Impressions': 'sum',
-        'Clicks': 'sum',
-        'Ad fees': 'sum',
-        'Sales': 'sum',
-        'Sold quantity': 'sum'
-    }).reset_index()
+    agg_dict = {}
+    if impressions_col in query_df.columns:
+        agg_dict[impressions_col] = 'sum'
+    if clicks_col in query_df.columns:
+        agg_dict[clicks_col] = 'sum'
+    if ad_fees_col in query_df.columns:
+        agg_dict[ad_fees_col] = 'sum'
+    if sales_col in query_df.columns:
+        agg_dict[sales_col] = 'sum'
+    if sold_col in query_df.columns:
+        agg_dict[sold_col] = 'sum'
+    
+    if not agg_dict:
+        return pd.DataFrame()  # No numeric columns to aggregate
+    
+    query_summary = query_df.groupby(query_col).agg(agg_dict).reset_index()
+    
+    # Rename columns to standard names
+    query_summary.rename(columns={
+        impressions_col: 'Impressions',
+        clicks_col: 'Clicks',
+        ad_fees_col: 'Ad fees',
+        sales_col: 'Sales',
+        sold_col: 'Sold quantity'
+    }, inplace=True)
     
     # Calculate ACOS for each query
     query_summary['ACOS'] = query_summary.apply(
-        lambda row: (row['Ad fees'] / row['Sales'] * 100) if row['Sales'] > 0 
-        else (999 if row['Ad fees'] > 0 else 0), axis=1
+        lambda row: (row.get('Ad fees', 0) / row.get('Sales', 1) * 100) if row.get('Sales', 0) > 0 
+        else (999 if row.get('Ad fees', 0) > 0 else 0), axis=1
     )
     
     # Filter for negative keyword candidates
+    min_clicks = config.get('min_queries_for_negative', 3)
+    max_acos = config.get('max_acos_for_negative', 100)
+    
     negative_candidates = query_summary[
-        (query_summary['Clicks'] >= config['min_queries_for_negative']) &
-        ((query_summary['ACOS'] > config['max_acos_for_negative']) | 
-         ((query_summary['Sales'] == 0) & (query_summary['Ad fees'] > 0)))
+        (query_summary.get('Clicks', pd.Series([0]*len(query_summary))) >= min_clicks) &
+        ((query_summary['ACOS'] > max_acos) | 
+         ((query_summary.get('Sales', pd.Series([0]*len(query_summary))) == 0) & 
+          (query_summary.get('Ad fees', pd.Series([0]*len(query_summary))) > 0)))
     ].copy()
     
+    if len(negative_candidates) == 0:
+        return pd.DataFrame()
+    
     negative_candidates['Recommendation'] = negative_candidates.apply(
-        lambda row: 'No sales despite clicks' if row['Sales'] == 0 
+        lambda row: 'No sales despite clicks' if row.get('Sales', 0) == 0 
         else f'ACOS too high ({row["ACOS"]:.1f}%)', axis=1
     )
     
     # Sort by wasted spend
     negative_candidates['Wasted Spend'] = negative_candidates.apply(
-        lambda row: row['Ad fees'] if row['Sales'] == 0 
-        else row['Ad fees'] - (row['Sales'] * config['acos_good'] / 100), axis=1
+        lambda row: row.get('Ad fees', 0) if row.get('Sales', 0) == 0 
+        else row.get('Ad fees', 0) - (row.get('Sales', 0) * config.get('acos_good', 30) / 100), axis=1
     )
     
     negative_candidates = negative_candidates.sort_values('Wasted Spend', ascending=False)
+    
+    # Rename query column back for display
+    negative_candidates.rename(columns={query_col: 'Search Query'}, inplace=True)
     
     return negative_candidates[['Search Query', 'Clicks', 'Ad fees', 'Sales', 'ACOS', 
                                 'Recommendation', 'Wasted Spend']].round(2)
