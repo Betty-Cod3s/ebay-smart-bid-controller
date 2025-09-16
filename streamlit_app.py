@@ -85,8 +85,25 @@ def process_keyword_report(df):
         df.columns = df.iloc[0]
         df = df.iloc[1:]
     
-    # Clean column names
-    df.columns = [col.strip() for col in df.columns]
+    # Clean column names - REMOVE TRAILING SPACES
+    df.columns = [str(col).strip() for col in df.columns]
+    
+    # Rename columns to standard names (handle variations)
+    column_mapping = {
+        'Sales': 'Sales',
+        'Sales ': 'Sales',  # With space
+        'Ad fees': 'Ad fees',
+        'Ad fees ': 'Ad fees',
+        'Impressions': 'Impressions',
+        'Impressions ': 'Impressions',
+        'Clicks': 'Clicks',
+        'Clicks ': 'Clicks',
+        'Sold quantity': 'Sold quantity',
+        'Sold quantity ': 'Sold quantity',
+        'Status': 'Status',
+        'Status ': 'Status'
+    }
+    df.rename(columns=column_mapping, inplace=True)
     
     # Clean numeric columns
     numeric_cols = ['Impressions', 'Clicks', 'Sold quantity']
@@ -101,12 +118,18 @@ def process_keyword_report(df):
             df[col] = df[col].apply(clean_currency)
     
     # Calculate ACOS
-    df['ACOS'] = df.apply(lambda row: (row['Ad fees'] / row['Sales'] * 100) 
-                          if row['Sales'] > 0 else (999 if row['Ad fees'] > 0 else 0), axis=1)
+    if 'Sales' in df.columns and 'Ad fees' in df.columns:
+        df['ACOS'] = df.apply(lambda row: (row['Ad fees'] / row['Sales'] * 100) 
+                              if row['Sales'] > 0 else (999 if row['Ad fees'] > 0 else 0), axis=1)
+    else:
+        df['ACOS'] = 0
     
     # Calculate CTR
-    df['CTR_calc'] = df.apply(lambda row: (row['Clicks'] / row['Impressions'] * 100) 
-                               if row['Impressions'] > 0 else 0, axis=1)
+    if 'Clicks' in df.columns and 'Impressions' in df.columns:
+        df['CTR_calc'] = df.apply(lambda row: (row['Clicks'] / row['Impressions'] * 100) 
+                                   if row['Impressions'] > 0 else 0, axis=1)
+    else:
+        df['CTR_calc'] = 0
     
     return df
 
