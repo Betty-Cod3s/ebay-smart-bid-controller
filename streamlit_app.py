@@ -80,30 +80,14 @@ def clean_percentage(value):
 def process_keyword_report(df):
     """Process and clean keyword report"""
     # Skip header rows if they exist
-    if 'Some details' in str(df.iloc[0, 0]) if len(df) > 0 else False:
+    if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
         df = df.iloc[2:]
         df.columns = df.iloc[0]
         df = df.iloc[1:]
+        df.reset_index(drop=True, inplace=True)
     
-    # Clean column names - REMOVE TRAILING SPACES
+    # Clean ALL column names - remove ALL spaces from ends
     df.columns = [str(col).strip() for col in df.columns]
-    
-    # Rename columns to standard names (handle variations)
-    column_mapping = {
-        'Sales': 'Sales',
-        'Sales ': 'Sales',  # With space
-        'Ad fees': 'Ad fees',
-        'Ad fees ': 'Ad fees',
-        'Impressions': 'Impressions',
-        'Impressions ': 'Impressions',
-        'Clicks': 'Clicks',
-        'Clicks ': 'Clicks',
-        'Sold quantity': 'Sold quantity',
-        'Sold quantity ': 'Sold quantity',
-        'Status': 'Status',
-        'Status ': 'Status'
-    }
-    df.rename(columns=column_mapping, inplace=True)
     
     # Clean numeric columns
     numeric_cols = ['Impressions', 'Clicks', 'Sold quantity']
@@ -111,11 +95,15 @@ def process_keyword_report(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     
-    # Clean currency columns
+    # Clean currency columns  
     currency_cols = ['Bid', 'Ad fees', 'Sales', 'Average cost per click', 'Average cost per sale']
     for col in currency_cols:
         if col in df.columns:
             df[col] = df[col].apply(clean_currency)
+    
+    # Add Status column if missing
+    if 'Status' not in df.columns:
+        df['Status'] = 'Active'  # Default to Active
     
     # Calculate ACOS
     if 'Sales' in df.columns and 'Ad fees' in df.columns:
@@ -136,13 +124,14 @@ def process_keyword_report(df):
 def process_query_report(df):
     """Process and clean query report"""
     # Skip header rows if they exist
-    if 'Some details' in str(df.iloc[0, 0]) if len(df) > 0 else False:
+    if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
         df = df.iloc[2:]
         df.columns = df.iloc[0]
         df = df.iloc[1:]
+        df.reset_index(drop=True, inplace=True)
     
-    # Clean column names
-    df.columns = [col.strip() for col in df.columns]
+    # Clean ALL column names - remove ALL spaces from ends
+    df.columns = [str(col).strip() for col in df.columns]
     
     # Clean numeric columns
     numeric_cols = ['Impressions', 'Clicks', 'Sold quantity']
@@ -157,8 +146,11 @@ def process_query_report(df):
             df[col] = df[col].apply(clean_currency)
     
     # Calculate ACOS for queries
-    df['ACOS'] = df.apply(lambda row: (row['Ad fees'] / row['Sales'] * 100) 
-                          if row['Sales'] > 0 else (999 if row['Ad fees'] > 0 else 0), axis=1)
+    if 'Sales' in df.columns and 'Ad fees' in df.columns:
+        df['ACOS'] = df.apply(lambda row: (row['Ad fees'] / row['Sales'] * 100) 
+                              if row['Sales'] > 0 else (999 if row['Ad fees'] > 0 else 0), axis=1)
+    else:
+        df['ACOS'] = 0
     
     return df
 
