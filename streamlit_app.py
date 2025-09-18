@@ -187,6 +187,7 @@ def generate_bid_recommendations(keyword_df, config):
         ctr = row.get('CTR_calc', 0)
         keyword = row.get('Seller Keyword', 'Unknown')
         match_type = row.get('Keyword Match Type', 'Unknown')
+        ad_group = row.get('Ad Group Name', 'Unknown')  # Add AdGroup
         
         action = None
         reason = ""
@@ -224,6 +225,7 @@ def generate_bid_recommendations(keyword_df, config):
         
         if action:
             recommendations.append({
+                'Ad Group': ad_group,  # Add AdGroup as first column
                 'Keyword': keyword,
                 'Match Type': match_type,
                 'Current Bid': current_bid,
@@ -437,15 +439,6 @@ with tab2:
         
         st.divider()
         
-        # Column ordering
-        all_columns = list(recs.columns)
-        st.multiselect(
-            "Select and reorder columns (drag to rearrange):",
-            options=all_columns,
-            default=all_columns,
-            key="column_order"
-        )
-        
         # Filter by action
         action_filter = st.selectbox(
             "Filter by action:",
@@ -456,11 +449,6 @@ with tab2:
             filtered_recs = recs[recs['Action'] == action_filter]
         else:
             filtered_recs = recs
-        
-        # Apply column ordering
-        selected_cols = st.session_state.get('column_order', all_columns)
-        if selected_cols:
-            filtered_recs = filtered_recs[selected_cols]
         
         # Display recommendations
         st.dataframe(
