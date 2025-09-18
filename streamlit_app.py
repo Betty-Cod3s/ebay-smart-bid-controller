@@ -37,29 +37,29 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     
     st.subheader("📐 Performance Thresholds")
-    acos_good = st.slider("Good ACOS - Increase bids if below (%)", 10, 50, 30)
-    acos_poor = st.slider("Poor ACOS - Decrease bids if above (%)", 20, 60, 50)
+    acos_good = st.number_input("Good ACOS - Increase bids if below (%)", min_value=5, max_value=100, value=30, step=5)
+    acos_poor = st.number_input("Poor ACOS - Decrease bids if above (%)", min_value=10, max_value=200, value=50, step=5)
     
     st.subheader("📊 Activity Thresholds")
-    min_impressions_for_ctr = st.number_input("Min impressions to evaluate CTR", value=100, step=10)
-    min_clicks_no_sales = st.number_input("Min clicks with 0 sales to decrease", value=5, step=1)
+    min_impressions_for_ctr = st.number_input("Min impressions to evaluate CTR", min_value=10, max_value=1000, value=100, step=10)
+    min_clicks_no_sales = st.number_input("Min clicks with 0 sales to decrease", min_value=1, max_value=50, value=5, step=1)
     
     st.subheader("💰 Spend Thresholds")
-    pause_spend = st.number_input("Pause if ad spend above ($) with 0 sales", value=10.0, step=1.0)
+    pause_spend = st.number_input("Pause if ad spend above ($) with 0 sales", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
     
     st.subheader("🔧 Bid Adjustments")
-    increase_percent = st.slider("Bid increase %", 5, 30, 15)
-    decrease_percent = st.slider("Bid decrease %", 5, 30, 15)
+    increase_percent = st.number_input("Bid increase %", min_value=5, max_value=50, value=15, step=5)
+    decrease_percent = st.number_input("Bid decrease %", min_value=5, max_value=50, value=15, step=5)
     
     st.subheader("🚫 Negative Keywords")
-    min_queries_for_negative = st.number_input("Min queries to consider for negative", value=3, step=1)
-    max_acos_for_negative = st.slider("Max ACOS to add as negative (%)", 50, 200, 100)
+    min_queries_for_negative = st.number_input("Min queries to consider for negative", min_value=1, max_value=20, value=3, step=1)
+    max_acos_for_negative = st.number_input("Max ACOS to add as negative (%)", min_value=50, max_value=500, value=100, step=10)
     
     st.divider()
     st.info("💡 Adjust thresholds based on your profit margins")
 
 # Main content area
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload Reports", "📊 Bid Adjustments", "🚫 Negative Keywords", "📚 Help"])
+tab1, tab2, tab3 = st.tabs(["📤 Upload Reports", "📊 Bid Adjustments", "🚫 Negative Keywords"])
 
 def clean_currency(value):
     """Clean currency strings to float"""
@@ -79,19 +79,12 @@ def clean_percentage(value):
 
 def process_keyword_report(df):
     """Process and clean keyword report"""
-    # Skip ALL non-data header rows at the beginning
-    # eBay reports typically have 2-3 header rows before actual data
-    start_row = 0
-    for i in range(min(5, len(df))):  # Check first 5 rows max
-        # Look for the row that contains column headers
-        if any('Seller Keyword' in str(val) or 'Campaign name' in str(val) for val in df.iloc[i].values):
-            df.columns = df.iloc[i]
-            start_row = i + 1
-            break
-    
-    # If we found headers, use data from next row onwards
-    if start_row > 0:
-        df = df.iloc[start_row:].reset_index(drop=True)
+    # Skip warning header if present
+    if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
+        df = df.iloc[2:]
+        df.columns = df.iloc[0]
+        df = df.iloc[1:]
+        df.reset_index(drop=True, inplace=True)
     
     # Create a standardized dataframe with consistent column names
     processed_df = pd.DataFrame()
@@ -137,18 +130,12 @@ def process_keyword_report(df):
 
 def process_query_report(df):
     """Process and clean query report"""
-    # Skip ALL non-data header rows at the beginning
-    start_row = 0
-    for i in range(min(5, len(df))):  # Check first 5 rows max
-        # Look for the row that contains column headers
-        if any('Search Query' in str(val) or 'Campaign name' in str(val) for val in df.iloc[i].values):
-            df.columns = df.iloc[i]
-            start_row = i + 1
-            break
-    
-    # If we found headers, use data from next row onwards
-    if start_row > 0:
-        df = df.iloc[start_row:].reset_index(drop=True)
+    # Skip warning header if present
+    if len(df) > 0 and 'Some details' in str(df.iloc[0, 0]):
+        df = df.iloc[2:]
+        df.columns = df.iloc[0]
+        df = df.iloc[1:]
+        df.reset_index(drop=True, inplace=True)
     
     # Create a standardized dataframe with consistent column names
     processed_df = pd.DataFrame()
@@ -450,6 +437,15 @@ with tab2:
         
         st.divider()
         
+        # Column ordering
+        all_columns = list(recs.columns)
+        st.multiselect(
+            "Select and reorder columns (drag to rearrange):",
+            options=all_columns,
+            default=all_columns,
+            key="column_order"
+        )
+        
         # Filter by action
         action_filter = st.selectbox(
             "Filter by action:",
@@ -460,6 +456,11 @@ with tab2:
             filtered_recs = recs[recs['Action'] == action_filter]
         else:
             filtered_recs = recs
+        
+        # Apply column ordering
+        selected_cols = st.session_state.get('column_order', all_columns)
+        if selected_cols:
+            filtered_recs = filtered_recs[selected_cols]
         
         # Display recommendations
         st.dataframe(
@@ -522,72 +523,6 @@ with tab3:
         
     else:
         st.info("👈 Upload both reports and click Analyze to see negative keyword suggestions")
-
-with tab4:
-    st.header("📚 How to Use")
-    
-    with st.expander("📥 How to Download Your eBay Reports", expanded=True):
-        st.write("""
-        **You need TWO reports from the same campaign:**
-        
-        1. **Log into eBay Advertising**
-           - Go to [advertising.ebay.com](https://advertising.ebay.com)
-           - Select your campaign
-        
-        2. **Download Keyword Report**
-           - Click **"Keywords"** tab
-           - Set date range (recommend 30 days)
-           - Click **"Download"** → Choose **CSV**
-           - File will be named like: `CampaignName_Keyword_Date.csv`
-        
-        3. **Download Query Report**
-           - Click **"Search queries"** tab
-           - Same date range as keyword report
-           - Click **"Download"** → Choose **CSV**
-           - File will be named like: `CampaignName_Query_Date.csv`
-        
-        4. **Upload Both Files Here**
-           - Upload Keyword Report on the left
-           - Upload Query Report on the right
-           - Click "Analyze Campaign"
-        
-        **Important:** Both reports must be from the same campaign and date range!
-        """)
-    
-    with st.expander("🎯 Understanding the Recommendations"):
-        st.write("""
-        **Bid Adjustments:**
-        - **INCREASE**: Keywords performing well (low ACOS) or need more visibility (low CTR)
-        - **DECREASE**: Keywords with poor ACOS or clicks without sales
-        - **PAUSE**: Keywords spending money with zero return
-        
-        **Negative Keywords:**
-        - Search queries that people click but never buy
-        - Queries with extremely high ACOS (unprofitable)
-        - Adding these prevents your ads from showing for these searches
-        
-        **ACOS (Advertising Cost of Sale):**
-        - Formula: (Ad Spend ÷ Revenue) × 100
-        - Under 30%: Generally profitable
-        - 30-50%: Break-even range
-        - Over 50%: Usually unprofitable
-        """)
-    
-    with st.expander("📊 Configuration Tips"):
-        st.write("""
-        **Adjust settings in the sidebar based on your business:**
-        
-        - **High margin products**: Can tolerate higher ACOS (40-60%)
-        - **Low margin products**: Need lower ACOS (15-25%)
-        - **New campaigns**: Be less aggressive with pausing
-        - **Mature campaigns**: Can be more aggressive with optimization
-        
-        **Conservative approach**: Smaller bid adjustments (5-10%)
-        **Aggressive approach**: Larger bid adjustments (15-25%)
-        """)
-    
-    st.divider()
-    st.info("💡 Run this analysis weekly for best results!")
 
 # Footer
 st.divider()
