@@ -51,9 +51,15 @@ with st.sidebar:
     increase_percent = st.number_input("Bid increase %", min_value=5, max_value=50, value=15, step=5)
     decrease_percent = st.number_input("Bid decrease %", min_value=5, max_value=50, value=15, step=5)
     
-    st.subheader("🚫 Negative Keywords")
-    min_queries_for_negative = st.number_input("Min queries to consider for negative", min_value=1, max_value=20, value=3, step=1)
-    max_acos_for_negative = st.number_input("Max ACOS to add as negative (%)", min_value=50, max_value=500, value=100, step=10)
+    st.subheader("🚫 Money Wasters")
+    waste_threshold = st.number_input(
+        "Flag searches that cost more than ($) with 0 sales:", 
+        min_value=1.0, 
+        max_value=20.0, 
+        value=5.0, 
+        step=1.0,
+        help="Any search term that costs you this much without generating sales will be flagged"
+    )
     
     st.divider()
     st.info("💡 Adjust thresholds based on your profit margins")
@@ -397,8 +403,7 @@ with tab1:
                     'pause_spend': pause_spend,
                     'increase_percent': increase_percent,
                     'decrease_percent': decrease_percent,
-                    'min_queries_for_negative': min_queries_for_negative,
-                    'max_acos_for_negative': max_acos_for_negative
+                    'waste_threshold': waste_threshold
                 }
                 
                 bid_recs = generate_bid_recommendations(st.session_state.keyword_data, config)
@@ -474,43 +479,54 @@ with tab2:
         st.info("👈 Upload both reports and click Analyze to see bid recommendations")
 
 with tab3:
-    st.header("🚫 Negative Keyword Suggestions")
+    st.header("💸 Money Wasting Searches")
     
     if st.session_state.negative_keywords is not None and not st.session_state.negative_keywords.empty:
         
-        st.write(f"Found {len(st.session_state.negative_keywords)} search queries that are wasting budget:")
-        
-        # Summary of wasted spend
-        if 'Wasted Spend' in st.session_state.negative_keywords.columns:
-            total_wasted = st.session_state.negative_keywords['Wasted Spend'].sum()
-            st.metric("💸 Total Wasted Spend", f"${total_wasted:.2f}")
+        # Calculate total wasted
+        if 'Money Wasted' in st.session_state.negative_keywords.columns:
+            total_wasted = st.session_state.negative_keywords['Money Wasted'].sum()
+            
+            # Big, clear message about money being wasted
+            st.error(f"**You're wasting ${total_wasted:.2f} per month on searches that never convert to sales!**")
+            
+            st.info("💡 **What to do:** Add these search terms as negative keywords in your eBay campaign to stop paying for worthless clicks")
         
         st.divider()
         
-        # Display negative keyword candidates
+        # Display the money wasters
         st.dataframe(
             st.session_state.negative_keywords,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Ad fees": st.column_config.NumberColumn(format="$%.2f"),
-                "Sales": st.column_config.NumberColumn(format="$%.2f"),
-                "ACOS": st.column_config.NumberColumn(format="%.1f"),
-                "Wasted Spend": st.column_config.NumberColumn(format="$%.2f")
+                "Money Wasted": st.column_config.NumberColumn(format="$%.2f"),
+                "Clicks Paid For": st.column_config.NumberColumn(format="%d"),
             }
         )
         
         # Download button
         csv = st.session_state.negative_keywords.to_csv(index=False)
         b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="negative_keywords.csv">📥 Download Negative Keyword List</a>'
+        href = f'<a href="data:file/csv;base64,{b64}" download="money_wasting_searches.csv">📥 Download List of Money Wasters</a>'
         st.markdown(href, unsafe_allow_html=True)
         
         st.divider()
-        st.info("💡 Add these as negative keywords in your eBay campaign to stop wasting budget on non-converting searches")
+        
+        # Simple explanation
+        st.markdown("""
+        **Why these searches waste money:**
+        - People clicked your ad after searching these terms
+        - You paid for every click
+        - They never bought anything
+        - Block these terms to stop the waste
+        """)
+        
+    elif st.session_state.negative_keywords is not None:
+        st.success("✅ No money-wasting searches found! Your campaign is efficiently targeting buyers.")
         
     else:
-        st.info("👈 Upload both reports and click Analyze to see negative keyword suggestions")
+        st.info("👈 Upload both reports and click Analyze to find money-wasting searches")
 
 # Footer
 st.divider()
