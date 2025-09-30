@@ -100,17 +100,26 @@ def process_keyword_report(df):
         col_clean = str(col).strip()
         processed_df[col_clean] = df[col].values
     
+    # ===== CRITICAL FIX: Map eBay column names =====
+    column_map = {
+        'Ad fees': 'Ad fees',  # Keep original but also create Ad Spend
+        'Seller Keyword': 'Seller Keyword',  # Keep for reference
+    }
+    processed_df = processed_df.rename(columns=column_map)
+    
     # Ensure numeric columns are numeric
     numeric_cols = ['Impressions', 'Clicks', 'Sold quantity']
     for col in numeric_cols:
         if col in processed_df.columns:
             processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce').fillna(0)
     
-    # Clean currency columns
+    # Clean currency columns - THIS IS THE KEY FIX
     currency_cols = ['Bid', 'Ad fees', 'Sales', 'Average cost per click', 'Average cost per sale']
     for col in currency_cols:
         if col in processed_df.columns:
-            processed_df[col] = processed_df[col].apply(clean_currency)
+            # Remove $ and commas, then convert to float
+            processed_df[col] = processed_df[col].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
+            processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce').fillna(0)
     
     # Add calculated columns
     processed_df['ACOS'] = 0
@@ -157,11 +166,13 @@ def process_query_report(df):
         if col in processed_df.columns:
             processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce').fillna(0)
     
-    # Clean currency columns
+    # Clean currency columns - THE FIX
     currency_cols = ['Keyword Bid', 'Ad fees', 'Sales']
     for col in currency_cols:
         if col in processed_df.columns:
-            processed_df[col] = processed_df[col].apply(clean_currency)
+            # Remove $ and commas, then convert to float
+            processed_df[col] = processed_df[col].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
+            processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce').fillna(0)
     
     # Add ACOS calculation
     processed_df['ACOS'] = 0
@@ -251,7 +262,7 @@ def generate_bid_recommendations(keyword_df, config):
     return pd.DataFrame(recommendations)
 
 def find_negative_keywords(query_df, config):
-    """Identify potential negative keywords from query report"""
+    """Identify searches that waste money (cost money but generated $0 sales)"""
     
     # Check if we have the Search Query column
     if 'Search Query' not in query_df.columns:
@@ -276,50 +287,28 @@ def find_negative_keywords(query_df, config):
     # Group by search query
     query_summary = query_df.groupby('Search Query').agg(agg_dict).reset_index()
     
-    # Calculate ACOS for each query
-    if 'Sales' in query_summary.columns and 'Ad fees' in query_summary.columns:
-        query_summary['ACOS'] = query_summary.apply(
-            lambda row: (row['Ad fees'] / row['Sales'] * 100) if row['Sales'] > 0 
-            else (999 if row['Ad fees'] > 0 else 0), axis=1
-        )
-    else:
-        query_summary['ACOS'] = 0
-    
-    # Filter for negative keyword candidates
-    negative_candidates = query_summary[
-        (query_summary.get('Clicks', 0) >= config['min_queries_for_negative']) &
-        ((query_summary['ACOS'] > config['max_acos_for_negative']) | 
-         ((query_summary.get('Sales', 0) == 0) & (query_summary.get('Ad fees', 0) > 0)))
+    # Find money wasters: searches that cost money but generated $0 sales
+    money_wasters = query_summary[
+        (query_summary.get('Ad fees', 0) >= config['waste_threshold']) &
+        (query_summary.get('Sales', 0) == 0)
     ].copy()
     
-    if len(negative_candidates) == 0:
+    if len(money_wasters) == 0:
         return pd.DataFrame()
     
-    negative_candidates['Recommendation'] = negative_candidates.apply(
-        lambda row: 'No sales despite clicks' if row.get('Sales', 0) == 0 
-        else f'ACOS too high ({row["ACOS"]:.1f}%)', axis=1
-    )
+    # Format output
+    money_wasters = money_wasters.rename(columns={
+        'Ad fees': 'Money Wasted',
+        'Clicks': 'Clicks Paid For'
+    })
     
-    # Sort by wasted spend
-    negative_candidates['Wasted Spend'] = negative_candidates.apply(
-        lambda row: row.get('Ad fees', 0) if row.get('Sales', 0) == 0 
-        else row.get('Ad fees', 0) - (row.get('Sales', 0) * config['acos_good'] / 100), axis=1
-    )
-    
-    negative_candidates = negative_candidates.sort_values('Wasted Spend', ascending=False)
+    # Sort by money wasted (most expensive first)
+    money_wasters = money_wasters.sort_values('Money Wasted', ascending=False)
     
     # Select columns for output
-    output_cols = ['Search Query', 'Recommendation', 'Wasted Spend']
-    if 'Clicks' in negative_candidates.columns:
-        output_cols.insert(1, 'Clicks')
-    if 'Ad fees' in negative_candidates.columns:
-        output_cols.insert(-1, 'Ad fees')
-    if 'Sales' in negative_candidates.columns:
-        output_cols.insert(-1, 'Sales')
-    if 'ACOS' in negative_candidates.columns:
-        output_cols.insert(-1, 'ACOS')
+    output_cols = ['Search Query', 'Money Wasted', 'Clicks Paid For']
     
-    return negative_candidates[output_cols].round(2)
+    return money_wasters[output_cols].round(2)
 
 with tab1:
     st.header("📤 Upload Your eBay Reports")
